@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
+	"strings"
 	"sync/atomic"
 )
 
@@ -20,7 +22,7 @@ type apiConfig struct {
 }
 
 type ReturnMsg struct {
-	Valid bool `json:"valid"`
+	CleanBody string `json:"cleaned_body"`
 }
 
 type BodyMsg struct {
@@ -48,7 +50,16 @@ func validateChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondWithJSON(w, 200, ReturnMsg{Valid: true})
+	profanities := []string{"kerfuffle", "sharbert", "fornax"}
+	words := strings.Split(body.Body, " ")
+	for i, word := range words {
+		if slices.Contains(profanities, strings.ToLower(word)) {
+			words[i] = "****"
+		}
+	}
+	clean := strings.Join(words, " ")
+
+	respondWithJSON(w, 200, ReturnMsg{CleanBody: clean})
 }
 
 func (cfg *apiConfig) getHits(w http.ResponseWriter, r *http.Request) {
