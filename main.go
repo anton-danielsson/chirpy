@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -18,11 +19,36 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 }
 
+type ReturnMsg struct {
+	Valid bool `json:"valid"`
+}
+
+type BodyMsg struct {
+	Body string `json:"body"`
+}
+
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cfg.fileserverHits.Add(1)
 		next.ServeHTTP(w, r)
 	})
+}
+
+func validateChirp(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
+	body := BodyMsg{}
+	err := decoder.Decode(&body)
+	if err != nil {
+		respondWithError(w, 500, "Something went wrong", err)
+		return
+	}
+
+	if len(body.Body) > 140 {
+		respondWithError(w, 400, "Chirp is too long", nil)
+		return
+	}
+
+	respondWithJSON(w, 200, ReturnMsg{Valid: true})
 }
 
 func (cfg *apiConfig) getHits(w http.ResponseWriter, r *http.Request) {
@@ -53,6 +79,7 @@ func main() {
 
 	mux.Handle("/app/", conf.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir("./www/")))))
 	mux.Handle("GET /api/healthz", conf.middlewareMetricsInc(http.HandlerFunc(myHandler)))
+	mux.Handle("POST /api/validate_chirp", http.HandlerFunc(validateChirp))
 	mux.Handle("GET /admin/metrics", http.HandlerFunc(conf.getHits))
 	mux.Handle("POST /admin/reset", http.HandlerFunc(conf.resetHits))
 
